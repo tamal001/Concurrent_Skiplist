@@ -1,13 +1,5 @@
 #pragma once
 
-#include<math.h>
-#include <random>
-#include <chrono>
-#include <cassert>
-#include <atomic>
-#include <tuple>
-#include <iostream>
-
 #ifndef MAX_THREADS
 #define MAX_THREADS 256
 #endif

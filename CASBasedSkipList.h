@@ -1,4 +1,9 @@
 #pragma once
+#include <tuple>
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <random>
 
 #include "defines.h"
 
@@ -136,7 +141,7 @@ bool CASBasedSkipList::insertIfAbsent(const int tid, const int & key, const int 
             tie(pred, succ) = list_lookup(tid, key);
         }
     }
-    return false;
+    return true;   //Not sure in the pseudocode as new node insert does not return any value
 }
 
 bool CASBasedSkipList::erase(const int tid, const int & key) {
