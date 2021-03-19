@@ -86,17 +86,23 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
 
                 // insert or delete this key (50% probability of each)
                 if (operationType < insertPercent) {
-                    auto result = g->ds->insertIfAbsent(tid, key, value);
-                    if (result) {
+                    printf("Before insert\n");
+                    auto result = g->ds->insertOrUpdate(tid, key, value);
+                    //Checksum only updated the first time the key is inserted. Not added for update operation.
+                    if (result == 0) {
                         g->keyChecksum.add(tid, key);
                         g->sizeChecksum.add(tid, 1);
+                        
                     }
+                    printf("After insert\n");
                 } else if (operationType < insertPercent + deletePercent) {
+                    printf("Before delete\n");
                     auto result = g->ds->erase(tid, key);
                     if (result) {
                         g->keyChecksum.add(tid, -key);
                         g->sizeChecksum.add(tid, -1);
                     }
+                    printf("After delete\n");
                 } else {
                     auto result = g->ds->contains(tid, key);
                     garbage += result;

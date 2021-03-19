@@ -32,7 +32,7 @@ public:
     ~CASBasedSkipList();
     
     int contains(const int tid, const int & key);
-    bool insertIfAbsent(const int tid, const int & key, const int & value); 
+    bool insertOrUpdate(const int tid, const int & key, const int & value); 
     bool erase(const int tid, const int & key); 
     
     bool is_marked(node *n);
@@ -73,7 +73,7 @@ tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::li
         node * left_next = left->next[i];
         if(is_marked(left_next)) goto retry;
         node *right, *right_next;
-        for(node *right = left_next; ; right = right_next){
+        for(right = left_next; ; right = right_next){
             while(true){
                 right_next = right->next[i];
                 if(!is_marked(right_next)) break;
@@ -84,7 +84,7 @@ tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::li
             left = right;
             left_next = right_next;
         }
-        if(left_next != right && left->next[i].compare_exchange_strong(left_next,right)){
+        if(left_next != right && left->next[i].compare_exchange_strong(left_next, right)){
             goto retry;
         }
         left_list[i] = left; right_list[i] = right;
@@ -99,7 +99,7 @@ int CASBasedSkipList::contains(const int tid, const int & key) {
     return (succ[0]->key == key) ? (int) succ[0]->value : MINVAL;
 }
 
-bool CASBasedSkipList::insertIfAbsent(const int tid, const int & key, const int & value) {
+bool CASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int & value) {
     assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
     node * new_node = new Node(key, value, determineLevel(key));
     retry:
@@ -133,7 +133,7 @@ bool CASBasedSkipList::insertIfAbsent(const int tid, const int & key, const int 
                 break;
             }
             if(succs->key == key) {
-                succs = unmark_single_level(succs->next[i]);
+                succs = unmark_single_level(succs->next[i]);          //This is meaningless
             }
             if(preds->next[i].compare_exchange_strong(succs, new_node)){
                 break;
@@ -152,11 +152,11 @@ bool CASBasedSkipList::erase(const int tid, const int & key) {
     int v;
     do{
         v = succ[0]->value;
-        if(v == MINVAL) return NULL;
-    }while(succ[0]->value.compare_exchange_weak(v, MINVAL));
+        if(v == MINVAL) return false;
+    }while(!succ[0]->value.compare_exchange_weak(v, MINVAL));
     mark_node_ptrs(succ[0]);
     tie(pred,succ) = list_lookup(tid, key);
-    return false;
+    return true;
 }
 
 long CASBasedSkipList::getSumOfKeys() {
@@ -185,6 +185,7 @@ int CASBasedSkipList::determineLevel(int key){
 }
 
 bool CASBasedSkipList::is_marked(node *n){
+    if(n==NULL) return false;
     if((long)n->next & 1) return true;
     return false;
 }
@@ -195,13 +196,14 @@ CASBasedSkipList::node * CASBasedSkipList::unmark_all(node *n){
         do{
             n_next = n->next[i];
             if(is_marked(n_next)) break;
-        }while(n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & (~1))));
+        }while(!n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & (~1))));
     }
         //n->next [i] = n->next[i] & 1;
     return n;                     //need CAS here
 }
 
 CASBasedSkipList::node * CASBasedSkipList::unmark_single_level(node *n){
+    if (n==NULL) return NULL;
     n = (node *)((long) n & (~1));
     return n;
 }
@@ -212,7 +214,7 @@ void CASBasedSkipList::mark_node_ptrs(node *n){
         do{
             n_next = n->next[i];
             if(is_marked(n_next)) break;
-        }while(n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & 1)));
+        }while(!n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & 1)));
         n->value = MINVAL;
     }
     n->value = MINVAL;
