@@ -3,7 +3,7 @@ FLAGS = -std=c++17 -O3 -g
 #FLAGS += -DNDEBUG
 LDFLAGS = -pthread
 
-PROGRAMS = main
+PROGRAMS = main tester
 
 all: $(PROGRAMS)
 
@@ -12,6 +12,11 @@ build:
 	cp -f libjemalloc.so $@/.
 
 main: build
+	$(GPP) $(FLAGS) -MMD -MP -MF build/$@.d -o $@ $@.cpp $(LDFLAGS)
+
+-include $(addprefix build/,$(addsuffix .d, $(PROGRAMS)))
+
+tester: build
 	$(GPP) $(FLAGS) -MMD -MP -MF build/$@.d -o $@ $@.cpp $(LDFLAGS)
 
 -include $(addprefix build/,$(addsuffix .d, $(PROGRAMS)))

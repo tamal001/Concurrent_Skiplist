@@ -43,7 +43,7 @@ public:
     tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> list_lookup(int tid,int key);
 
     int valueTraversal();
-    int listTraversal();
+    void listTraversal();
     long getSumOfKeys(); 
     void printDebuggingDetails();
 };
@@ -84,7 +84,10 @@ tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::li
                 right = unmark_single_level(right_next);
             }
             if(right->key >= key) break;
-            //if()
+            /*  //Not helping to remove sig fault                        
+            if(left_next != right && !left->next[i].compare_exchange_strong(left_next, right)){
+                goto retry;
+            } */
             left = right;
             left_next = left->next[i];
         }
@@ -185,7 +188,7 @@ long CASBasedSkipList::getSumOfKeys() {
 }
 
 void CASBasedSkipList::printDebuggingDetails() {
-    
+    listTraversal();
 }
 
 int CASBasedSkipList::determineLevel(int key){
@@ -218,8 +221,7 @@ CASBasedSkipList::node * CASBasedSkipList::unmark_all(node *n){
             if(is_marked(n_next)) break;
         }while(!n->next[i].compare_exchange_strong(n_next, (node *)(((uint64_t)n_next) & (~1))));
     }
-        //n->next [i] = n->next[i] & 1;
-    return n;                     //need CAS here
+    return n;               
 }
 
 CASBasedSkipList::node * CASBasedSkipList::unmark_single_level(node *n){
@@ -228,7 +230,7 @@ CASBasedSkipList::node * CASBasedSkipList::unmark_single_level(node *n){
 }
 
 void CASBasedSkipList::mark_node_ptrs(node *n){
-    for (int i = n->level-1; i>=0; i--){
+    for (int i = 0; i < n->level; i++){
         node * n_next;
         do{
             n_next = n->next[i];
@@ -237,19 +239,16 @@ void CASBasedSkipList::mark_node_ptrs(node *n){
     }
 }
 
-int CASBasedSkipList::listTraversal(){
+void CASBasedSkipList::listTraversal(){
     node *n = head;
-    int count = 0;
     printf("Traversing list from head: ");
     while(n!=NULL){
-        count++;
         printf("%d ",n->key);
         if(is_marked(n->next[0])){
             n = unmark_single_level(n->next[0]);
         }else n = n->next[0];
     }
     printf("\n");
-    return count-2;
 }
 
 int CASBasedSkipList::valueTraversal(){
