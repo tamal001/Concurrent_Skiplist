@@ -17,7 +17,7 @@ private:
     const int maxKey;
     volatile char padding1[PADDING_BYTES];
     typedef struct Node{
-        int key;
+        volatile int key;
         atomic<int> value;
         int level;
         atomic<Node *> next[NR_LEVELS];
@@ -42,6 +42,8 @@ public:
     int determineLevel(int key);
     tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> list_lookup(int tid,int key);
 
+    int valueTraversal();
+    int listTraversal();
     long getSumOfKeys(); 
     void printDebuggingDetails();
 };
@@ -71,20 +73,22 @@ tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::li
     node *left_list[NR_LEVELS], *right_list[NR_LEVELS];
     for(int i=NR_LEVELS-1;i>=0;i--){
         node * left_next = left->next[i];
-        if(is_marked(left_next)) goto retry;
-        node *right, *right_next;
-        for(right = left_next; ; right = right_next){
+        if(is_marked(left_next)) goto retry; 
+        node *right;
+        while(true){
+            right = left_next;
             while(true){
-                right_next = right->next[i];
+                node *right_next = right->next[i];
                 if(!is_marked(right_next)) break;
-                
+                //This actually means right node is marked
                 right = unmark_single_level(right_next);
             }
             if(right->key >= key) break;
+            //if()
             left = right;
-            left_next = right_next;
+            left_next = left->next[i];
         }
-        if(left_next != right && left->next[i].compare_exchange_strong(left_next, right)){
+        if(left_next != right && !left->next[i].compare_exchange_strong(left_next, right)){
             goto retry;
         }
         left_list[i] = left; right_list[i] = right;
@@ -96,6 +100,11 @@ int CASBasedSkipList::contains(const int tid, const int & key) {
     assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
     node **pred, **succ;
     tie(pred,succ) = list_lookup(tid, key);
+    //Just use the variables to avoid being optimized out. INTENSE HEADACHE
+    for(int i=NR_LEVELS-1;i>=0;i--){
+        if(pred[i]==NULL) return contains(tid, key);
+        if(succ[i]==NULL) return contains(tid, key);
+    }
     return (succ[0]->key == key) ? (int) succ[0]->value : MINVAL;
 }
 
@@ -103,20 +112,21 @@ bool CASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int 
     assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
     node * new_node = new Node(key, value, determineLevel(key));
     retry:
-    node **pred, ** succ;
+    node **pred, **succ;
     tie(pred, succ) = list_lookup(tid, key);
     if(succ[0]->key == key){   //update the value of an existing key
-        int old_v = succ[0]->value;
+        int old_v;
         do{
+            old_v = succ[0]->value;
             if(old_v == MINVAL){
                 mark_node_ptrs(succ[0]);
                 goto retry;
             }
-        }while(succ[0]->value.compare_exchange_weak(old_v, value));
+        }while(!succ[0]->value.compare_exchange_strong(old_v, value));
         delete new_node;
-        return true;
+        return false;       //Updated but not inserted.
     }
-    //Key not present, insert in the list. Insert it
+    //Key not present, insert in the list.
     for(int i=0; i < new_node->level; i++){
         new_node->next[i] = succ[i];
     }
@@ -129,11 +139,11 @@ bool CASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int 
             node * succs = succ[i];
             node * new_next = new_node->next[i];
             node * new_next_um = unmark_single_level(new_node->next[i]);
-            if((new_next != succs) && (new_node->next[i].compare_exchange_strong(new_next_um, succs))){
+            if((new_next != succs) && !(new_node->next[i].compare_exchange_strong(new_next_um, succs))){
                 break;
             }
             if(succs->key == key) {
-                succs = unmark_single_level(succs->next[i]);          //This is meaningless
+                succs = unmark_single_level(succs->next[i]);
             }
             if(preds->next[i].compare_exchange_strong(succs, new_node)){
                 break;
@@ -148,19 +158,30 @@ bool CASBasedSkipList::erase(const int tid, const int & key) {
     assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
     node **pred, **succ;
     tie(pred,succ) = list_lookup(tid, key);
+    //Just use the variables to avoid being optimized out. INTENSE HEADACHE
+    for(int i=NR_LEVELS-1;i>=0;i--){
+        if(pred[i]==NULL) return erase(tid, key);
+        if(succ[i]==NULL) return erase(tid, key);
+    }
     if(succ[0]->key != key) return false;
     int v;
     do{
         v = succ[0]->value;
         if(v == MINVAL) return false;
-    }while(!succ[0]->value.compare_exchange_weak(v, MINVAL));
+    }while(!succ[0]->value.compare_exchange_strong(v, MINVAL));
     mark_node_ptrs(succ[0]);
     tie(pred,succ) = list_lookup(tid, key);
     return true;
 }
 
 long CASBasedSkipList::getSumOfKeys() {
-    return -1;
+    long sum = 0;
+    node *n = head->next[0];
+    while(n!=NULL){
+        if(n->key < MAXVAL && n->value > MINVAL) sum += n->key;
+        n = unmark_single_level(n->next[0]);
+    }
+    return sum;
 }
 
 void CASBasedSkipList::printDebuggingDetails() {
@@ -168,7 +189,6 @@ void CASBasedSkipList::printDebuggingDetails() {
 }
 
 int CASBasedSkipList::determineLevel(int key){
-    
     mt19937_64 rng;
     uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     seed_seq ss{uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed>>32)};
@@ -177,7 +197,7 @@ int CASBasedSkipList::determineLevel(int key){
 
     double number = distribution(rng);
     int level = 0;
-    while(level<=11){
+    while(level<NR_LEVELS){
         if(number<(1-pow(2,(-level)))) break;
         level++;
     }
@@ -186,7 +206,7 @@ int CASBasedSkipList::determineLevel(int key){
 
 bool CASBasedSkipList::is_marked(node *n){
     if(n==NULL) return false;
-    if((long)n->next & 1) return true;
+    if(((uint64_t)n) & 1) return true;
     return false;
 }
 
@@ -196,7 +216,7 @@ CASBasedSkipList::node * CASBasedSkipList::unmark_all(node *n){
         do{
             n_next = n->next[i];
             if(is_marked(n_next)) break;
-        }while(!n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & (~1))));
+        }while(!n->next[i].compare_exchange_strong(n_next, (node *)(((uint64_t)n_next) & (~1))));
     }
         //n->next [i] = n->next[i] & 1;
     return n;                     //need CAS here
@@ -204,8 +224,7 @@ CASBasedSkipList::node * CASBasedSkipList::unmark_all(node *n){
 
 CASBasedSkipList::node * CASBasedSkipList::unmark_single_level(node *n){
     if (n==NULL) return NULL;
-    n = (node *)((long) n & (~1));
-    return n;
+    return (node *)(((uint64_t) n) & (~1));
 }
 
 void CASBasedSkipList::mark_node_ptrs(node *n){
@@ -214,8 +233,36 @@ void CASBasedSkipList::mark_node_ptrs(node *n){
         do{
             n_next = n->next[i];
             if(is_marked(n_next)) break;
-        }while(!n->next[i].compare_exchange_weak(n_next, (node *)((long)n_next & 1)));
-        n->value = MINVAL;
+        }while(!n->next[i].compare_exchange_strong(n_next, (node *)((uint64_t)n_next | 1)));
     }
-    n->value = MINVAL;
+}
+
+int CASBasedSkipList::listTraversal(){
+    node *n = head;
+    int count = 0;
+    printf("Traversing list from head: ");
+    while(n!=NULL){
+        count++;
+        printf("%d ",n->key);
+        if(is_marked(n->next[0])){
+            n = unmark_single_level(n->next[0]);
+        }else n = n->next[0];
+    }
+    printf("\n");
+    return count-2;
+}
+
+int CASBasedSkipList::valueTraversal(){
+    node *n = head;
+    int count = 0;
+    //printf("Traversing list from head: ");
+    while(n!=NULL){
+        count++;
+        //printf("%d ",n->value.load(MOR));
+        if(is_marked(n->next[0])){
+            n = unmark_single_level(n->next[0]);
+        }else n = n->next[0];
+    }
+    printf("\n");
+    return count-2;
 }

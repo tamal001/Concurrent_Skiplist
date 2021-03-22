@@ -66,7 +66,7 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
     thread * threads[MAX_THREADS]; 
     for (int tid=0;tid<g->totalThreads;++tid) {
         threads[tid] = new thread([&, tid]() {
-            const int TIME_CHECKS = 100;
+            const int TIME_CHECKS = 500;
             size_t garbage = 0;
             
             // BARRIER WAIT
@@ -86,23 +86,19 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
 
                 // insert or delete this key (50% probability of each)
                 if (operationType < insertPercent) {
-                    printf("Before insert\n");
                     auto result = g->ds->insertOrUpdate(tid, key, value);
                     //Checksum only updated the first time the key is inserted. Not added for update operation.
-                    if (result == 0) {
+                    if (result) {
                         g->keyChecksum.add(tid, key);
                         g->sizeChecksum.add(tid, 1);
                         
                     }
-                    printf("After insert\n");
                 } else if (operationType < insertPercent + deletePercent) {
-                    printf("Before delete\n");
                     auto result = g->ds->erase(tid, key);
                     if (result) {
                         g->keyChecksum.add(tid, -key);
                         g->sizeChecksum.add(tid, -1);
                     }
-                    printf("After delete\n");
                 } else {
                     auto result = g->ds->contains(tid, key);
                     garbage += result;
@@ -183,10 +179,11 @@ void runExperiment(int keyRangeSize, int millisToRun, int totalThreads, double i
     
     auto numTotalOps = g->numTotalOps.getTotal();
     auto dsSumOfKeys = g->ds->getSumOfKeys();
+    auto dsSizeChecksum = g->ds->valueTraversal();
     auto threadsSumOfKeys = g->keyChecksum.getTotal();
     cout<<"Validation: sum of keys according to the data structure = "<<dsSumOfKeys<<" and sum of keys according to the threads = "<<threadsSumOfKeys<<".";
     cout<<((threadsSumOfKeys == dsSumOfKeys) ? " OK." : " FAILED.")<<endl;
-    cout<<"sizeChecksum="<<g->sizeChecksum.getTotal()<<endl;
+    cout<<"sizeChecksum ="<<g->sizeChecksum.getTotal()<<" size checksum according to data structure ="<<dsSizeChecksum<<endl;
     cout<<endl;
 
     cout<<"completedOperations="<<numTotalOps<<endl;
