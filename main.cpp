@@ -183,7 +183,7 @@ void runExperiment(int keyRangeSize, int millisToRun, int totalThreads, double i
     auto threadsSumOfKeys = g->keyChecksum.getTotal();
     cout<<"Validation: sum of keys according to the data structure = "<<dsSumOfKeys<<" and sum of keys according to the threads = "<<threadsSumOfKeys<<".";
     cout<<((threadsSumOfKeys == dsSumOfKeys) ? " OK." : " FAILED.")<<endl;
-    cout<<"sizeChecksum ="<<g->sizeChecksum.getTotal()<<" size checksum according to data structure ="<<dsSizeChecksum<<endl;
+    cout<<"sizeChecksum according to the counter ="<<g->sizeChecksum.getTotal()<<" size checksum according to data structure ="<<dsSizeChecksum<<endl;
     cout<<endl;
 
     cout<<"completedOperations="<<numTotalOps<<endl;
