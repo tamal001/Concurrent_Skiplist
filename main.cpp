@@ -11,7 +11,7 @@
 #include "defines.h"
 #include "util.h"
 
-#include "CASBasedSkipList.h"
+#include "MCASBasedSkipList.h"
 
 using namespace std;
 
@@ -82,10 +82,11 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
                 double operationType = g->rngs[tid].nextNatural() / (double) numeric_limits<unsigned int>::max() * 100;
                 
                 key = (int) (1 + (g->rngs[tid].nextNatural() % g->keyRangeSize));
-                value = (int) g->rngs[tid].nextNatural();
+                value = (int) g->rngs[tid].nextNatural()% 100000000;
 
                 // insert or delete this key (50% probability of each)
                 if (operationType < insertPercent) {
+                    value = value < 0? -value:value;
                     auto result = g->ds->insertOrUpdate(tid, key, value);
                     //Checksum only updated the first time the key is inserted. Not added for update operation.
                     if (result) {
@@ -253,14 +254,12 @@ int main(int argc, char** argv) {
     PRINT(deletePercent);
     PRINT(millisToRun);
     cout<<endl;
-    
     // check for too large thread count
     if (totalThreads >= MAX_THREADS) {
         std::cout<<"ERROR: totalThreads="<<totalThreads<<" >= MAX_THREADS="<<MAX_THREADS<<std::endl;
         return 1;
     }
-    
-    runExperiment<CASBasedSkipList>(keyRangeSize, millisToRun, totalThreads, insertPercent, deletePercent);
+    runExperiment<MCASBasedSkipList>(keyRangeSize, millisToRun, totalThreads, insertPercent, deletePercent);
     
     return 0;
 }

@@ -1,16 +1,20 @@
-
+#include <thread>
+#include <cstdlib>
+#include <string>
+#include <cstring>
 #include <iostream>
-#include <random>
-#include <tuple>
+#include <atomic>
 #include <chrono>
+#include<math.h>
 
-#include "CASBasedSkipList.h"
+#include "MCASBasedSkipList.h"
+#include "defines.h"
 
 using namespace std;
 
 int main()
 {
-  CASBasedSkipList n = CASBasedSkipList(1, 0, 100000);
+  MCASBasedSkipList n = MCASBasedSkipList(1, 0, 100000);
   for(int i = 1;    ;i++){
     int step = 0;
     int scan = 0;
@@ -42,6 +46,7 @@ int main()
       val = n.contains(0,a);
       if(val>0) printf("\nSUCCESS\n");
     }
+    else if(step == 9) break;
   }
   return 0;
 }
