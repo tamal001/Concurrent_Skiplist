@@ -13,8 +13,6 @@ class CASBasedSkipList {
 private:
     volatile char padding0[PADDING_BYTES];
     const int numThreads;
-    const int minKey;
-    const int maxKey;
     volatile char padding1[PADDING_BYTES];
     typedef struct Node{
         volatile int key;
@@ -28,19 +26,19 @@ private:
     volatile char padding2[PADDING_BYTES];
 
 public:
-    CASBasedSkipList(const int _numThreads, const int _minKey, const int _maxKey);
+    CASBasedSkipList(const int _numThreads);
     ~CASBasedSkipList();
     
-    int contains(const int tid, const int & key);
-    bool insertOrUpdate(const int tid, const int & key, const int & value); 
-    bool erase(const int tid, const int & key); 
+    int contains(const int & key);
+    bool insertOrUpdate(const int & key, const int & value); 
+    bool erase(const int & key); 
     
     bool is_marked(node *n);
     void mark_node_ptrs(node *n);
     node * unmark_all(node *n);
     node * unmark_single_level(node *n);
     int determineLevel(int key);
-    tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> list_lookup(int tid,int key);
+    tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> list_lookup(int key);
 
     int valueTraversal();
     void listTraversal();
@@ -48,8 +46,8 @@ public:
     void printDebuggingDetails();
 };
 
-CASBasedSkipList::CASBasedSkipList(const int _numThreads, const int _minKey, const int _maxKey)
-        : numThreads(_numThreads), minKey(_minKey), maxKey(_maxKey) {
+CASBasedSkipList::CASBasedSkipList(const int _numThreads)
+        : numThreads(_numThreads) {
     head = new node(MINVAL, MINVAL, NR_LEVELS);
     tail = new node(MAXVAL, MAXVAL, NR_LEVELS);
     for(int i=0;i<NR_LEVELS;i++){
@@ -67,7 +65,7 @@ CASBasedSkipList::~CASBasedSkipList() {
     }
 }
 
-tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::list_lookup(int tid, int key){
+tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::list_lookup(int key){
     retry:
     node * left = head;
     node *left_list[NR_LEVELS], *right_list[NR_LEVELS];
@@ -102,25 +100,23 @@ tuple<CASBasedSkipList::node **, CASBasedSkipList::node **> CASBasedSkipList::li
     return make_tuple(left_list, right_list);
 }
 
-int CASBasedSkipList::contains(const int tid, const int & key) {
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+int CASBasedSkipList::contains(const int & key) {
     node **pred, **succ;
-    tie(pred,succ) = list_lookup(tid, key);
+    tie(pred,succ) = list_lookup(key);
     //Just use the variables to avoid being optimized out. INTENSE HEADACHE
     for(int i=NR_LEVELS-1;i>=0;i--){
-        if(pred[i]==NULL) return contains(tid, key);
-        if(succ[i]==NULL) return contains(tid, key);
+        if(pred[i]==NULL) return contains(key);
+        if(succ[i]==NULL) return contains(key);
     }
     return (succ[0]->key == key) ? (int) succ[0]->value : MINVAL;
 }
 
-bool CASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int & value) {
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+bool CASBasedSkipList::insertOrUpdate(const int & key, const int & value) {
     node * new_node = new Node(key, value, determineLevel(key));
     //printf("Thread %d TRYING to insert key %d\n",tid,key);
     retry:
     node **pred, **succ;
-    tie(pred, succ) = list_lookup(tid, key);
+    tie(pred, succ) = list_lookup(key);
     if(succ[0]->key == key){   //update the value of an existing key
         int old_v;
         do{
@@ -156,22 +152,21 @@ bool CASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int 
             if(preds->next[i].compare_exchange_strong(succs, new_node)){
                 break;
             }
-            tie(pred, succ) = list_lookup(tid, key);
+            tie(pred, succ) = list_lookup(key);
         }
     }
     //printf("Thread %d DONE inserting key %d\n",tid,key);
     return true;   //Not sure in the pseudocode as new node insert does not return any value
 }
 
-bool CASBasedSkipList::erase(const int tid, const int & key) {
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+bool CASBasedSkipList::erase(const int & key) {
     //printf("Thread %d TRYING to delete key %d\n",tid,key);
     node **pred, **succ;
-    tie(pred,succ) = list_lookup(tid, key);
+    tie(pred,succ) = list_lookup(key);
     //Just use the variables to avoid being optimized out. INTENSE HEADACHE
     for(int i=NR_LEVELS-1;i>=0;i--){
-        if(pred[i]==NULL) return erase(tid, key);
-        if(succ[i]==NULL) return erase(tid, key);
+        if(pred[i]==NULL) return erase(key);
+        if(succ[i]==NULL) return erase(key);
     }
     if(succ[0]->key != key) {/*printf("Thread %d Not found key %d for delete\n",tid,key);*/ return false;}
     int v;
@@ -180,7 +175,7 @@ bool CASBasedSkipList::erase(const int tid, const int & key) {
         if(v == MINVAL) return false;
     }while(!succ[0]->value.compare_exchange_strong(v, MINVAL));
     mark_node_ptrs(succ[0]);
-    tie(pred,succ) = list_lookup(tid, key);
+    tie(pred,succ) = list_lookup(key);
     //printf("Thread %d DONE deleting key %d\n",tid,key);
     return true;
 }
@@ -189,7 +184,7 @@ long CASBasedSkipList::getSumOfKeys() {
     long sum = 0;
     node *n = head->next[0];
     while(n!=NULL){
-        if(n->key < MAXVAL && n->value > MINVAL) sum += n->key;
+        if(n->key < MAXVAL && n->key > MINVAL) sum += n->key;
         n = unmark_single_level(n->next[0]);
     }
     return sum;

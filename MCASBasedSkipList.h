@@ -15,8 +15,6 @@ class MCASBasedSkipList {
 private:
     volatile char padding0[PADDING_BYTES];
     const int numThreads;
-    const int minKey;
-    const int maxKey;
     volatile char padding1[PADDING_BYTES];
     typedef struct Node{
         int64 key;
@@ -33,13 +31,13 @@ private:
     volatile char padding3[PADDING_BYTES];
 
 public:
-    MCASBasedSkipList(const int _numThreads, const int _minKey, const int _maxKey);
+    MCASBasedSkipList(const int _numThreads);
     ~MCASBasedSkipList();
     
     //Dictionary operations
-    int contains(const int tid, const int & key);
-    bool insertOrUpdate(const int tid, const int & key, const int & value); 
-    bool erase(const int tid, const int & key); 
+    int contains(const int & key);
+    bool insertOrUpdate(const int & key, const int & value); 
+    bool erase(const int & key); 
     
     //assisting methods
     void setNodeValues(node *n, int _key, int _value, int _level);
@@ -53,8 +51,8 @@ public:
     void printDebuggingDetails();
 };
 
-MCASBasedSkipList::MCASBasedSkipList(const int _numThreads, const int _minKey, const int _maxKey)
-        : numThreads(_numThreads), minKey(_minKey), maxKey(_maxKey) {
+MCASBasedSkipList::MCASBasedSkipList(const int _numThreads)
+        : numThreads(_numThreads) {
     //mcas = new MCAS();
     head = new node();
     setNodeValues(head, MINVAL, MINVAL, NR_LEVELS);
@@ -98,16 +96,14 @@ MCASBasedSkipList::search_pass* MCASBasedSkipList::list_lookup(int key){
     return pass;
 }
 
-int MCASBasedSkipList::contains(const int tid, const int & key) {
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+int MCASBasedSkipList::contains(const int & key) {
     search_pass *pass = list_lookup(key);
     int val = (int) mcas.valueRead(&pass->succ[0]->key);
     delete pass;
     return (val == key) ? val : MINVAL;
 }
 
-bool MCASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int & value) {
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+bool MCASBasedSkipList::insertOrUpdate(const int & key, const int & value) {
     node *new_node = new node();
     //int level = determineLevel();
     int level = NR_LEVELS;
@@ -138,8 +134,7 @@ bool MCASBasedSkipList::insertOrUpdate(const int tid, const int & key, const int
     return true;
 }
 
-bool MCASBasedSkipList::erase(const int tid, const int & key){
-    assert(key > minKey - 1 && key >= minKey && key <= maxKey && key < maxKey + 1);
+bool MCASBasedSkipList::erase(const int & key){
     //printf("Inside delete with key %d\n",key);
     int count=0;
     int64 *ptr[NR_LEVELS*2+1], old[NR_LEVELS*2+1], newv[NR_LEVELS*2+1];

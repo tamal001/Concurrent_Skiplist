@@ -14,7 +14,7 @@ using namespace std;
 
 int main()
 {
-  MCASBasedSkipList n = MCASBasedSkipList(1, 0, 100000);
+  MCASBasedSkipList n = MCASBasedSkipList(1);
   for(int i = 1;    ;i++){
     int step = 0;
     int scan = 0;
@@ -31,19 +31,19 @@ int main()
       int a, b;
       printf("\nProvide key and value for insert\n");
       scan = scanf("%d %d",&a , &b);
-      bool s = n.insertOrUpdate(0,a,b);
+      bool s = n.insertOrUpdate(a,b);
       if(s) printf("\nSuccess\n");
     }else if (step == 2){
       int a;
       printf("\nProvide key to delete\n");
       scan = scanf("%d",&a);
-      bool s=n.erase(0,a);
+      bool s=n.erase(a);
       if(s) printf("\nSUCCESS\n");
     }else if (step == 3){
       int a, val = 0 ;
       printf("\nProvide key to Search\n");
       scan = scanf("%d",&a);
-      val = n.contains(0,a);
+      val = n.contains(a);
       if(val>0) printf("\nSUCCESS\n");
     }
     else if(step == 9) break;
