@@ -10,7 +10,11 @@
 
 #ifndef NR_LEVELS
 #define NR_LEVELS 12
-#endif      
+#endif
+
+#ifndef int64
+#define int64 int64_t
+#endif 
 
 #ifndef DEBUG
 #define DEBUG if(0)
@@ -34,4 +38,6 @@
 
 #define MINVAL INT32_MIN
 #define MAXVAL INT32_MAX
+
+#define MOR memory_order_relaxed
 

@@ -105,8 +105,8 @@ int MCASBasedSkipList::contains(const int & key) {
 
 bool MCASBasedSkipList::insertOrUpdate(const int & key, const int & value) {
     node *new_node = new node();
-    //int level = determineLevel();
-    int level = NR_LEVELS;
+    int level = determineLevel();
+    //int level = NR_LEVELS;
     setNodeValues(new_node,key,value,level);
     search_pass *pass;
     //printf("Inside insert with key %d\n",key);
