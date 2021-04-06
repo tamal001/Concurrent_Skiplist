@@ -20,7 +20,7 @@ private:
         int64 key;
         int64 value;
         int64 level;
-        Node * next[NR_LEVELS];    ///Change the next pointer according to the number of levels
+        Node ** next;    ///Change the next pointer according to the number of levels
     } node;
     node *head, *tail;
     struct search_pass{
@@ -55,19 +55,20 @@ MCASBasedSkipList::MCASBasedSkipList(const int _numThreads)
         : numThreads(_numThreads) {
     //mcas = new MCAS();
     head = new node();
-    setNodeValues(head, MINVAL, MINVAL, NR_LEVELS);
+    setNodeValues(head, MINKEY, MINVAL, NR_LEVELS);
     tail = new node();
-    setNodeValues(tail, MAXVAL, MAXVAL, NR_LEVELS);
+    setNodeValues(tail, MAXKEY, MAXVAL, NR_LEVELS);
     for(int i=0;i<NR_LEVELS;i++){
         mcas.valueWrite((int64 *)&head->next[i],(int64)tail);
         mcas.valueWrite((int64 *)&tail->next[i],(int64)NULL);
     }
 }
 
-void MCASBasedSkipList::setNodeValues(Node *n, int _key, int _value, int _level){
+void MCASBasedSkipList::setNodeValues(node *n, int _key, int _value, int _level){
     mcas.valueWrite(&n->key,_key);
     mcas.valueWrite(&n->value,_value);
     mcas.valueWrite(&n->level,_level);
+    n->next = new node*[_level];
 }
 
 MCASBasedSkipList::~MCASBasedSkipList() {
@@ -75,7 +76,7 @@ MCASBasedSkipList::~MCASBasedSkipList() {
     while(n!=NULL){
         cur = n;
         n = (node *)mcas.valueRead((int64 *)&n->next[0]);
-        delete n;
+        delete cur;
     }
 }
 
@@ -98,19 +99,17 @@ MCASBasedSkipList::search_pass* MCASBasedSkipList::list_lookup(int key){
 
 int MCASBasedSkipList::contains(const int & key) {
     search_pass *pass = list_lookup(key);
-    int val = (int) mcas.valueRead(&pass->succ[0]->key);
+    int listKey = (int) mcas.valueRead(&pass->succ[0]->key);
     delete pass;
-    return (val == key) ? val : MINVAL;
+    return (listKey == key) ? (int)mcas.valueRead(&pass->succ[0]->value) : MINVAL;
 }
 
 bool MCASBasedSkipList::insertOrUpdate(const int & key, const int & value) {
     node *new_node = new node();
     int level = determineLevel();
-    //int level = NR_LEVELS;
     setNodeValues(new_node,key,value,level);
     search_pass *pass;
-    //printf("Inside insert with key %d\n",key);
-    int64 *ptr[NR_LEVELS], old[NR_LEVELS], newv[NR_LEVELS];
+    int64 *ptr[level], old[level], newv[level];
     do{
         pass = list_lookup(key);
         int val;
@@ -173,14 +172,14 @@ long MCASBasedSkipList::getSumOfKeys() {
     node *n = (node *)mcas.valueRead((int64*)&head->next[0]);
     while(n!=NULL){
         long key = (long)mcas.valueRead((int64*)&n->key);
-        if(key < MAXVAL && key > MINVAL) sum += key;
+        if(key < MAXKEY && key > MINKEY) sum += key;
         n = (node *)mcas.valueRead((int64*)&n->next[0]);
     }
     return sum;
 }
 
 void MCASBasedSkipList::printDebuggingDetails() {
-    listTraversal();
+    //listTraversal();
 }
 
 int MCASBasedSkipList::determineLevel(){
