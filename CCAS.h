@@ -56,9 +56,9 @@ int64 CCAS::CCASRead (int64 *a){
 
 void CCAS::CCASHelp(CCASDesc *d){
     CCASDesc *dd = (CCASDesc *)((int64)d & (~2));
-    int64 dx = (int64)d|2;
+    //int64 dx = (int64)d|2;
     bool success = *(dd->cond) == UNDECIDED;
-    bool v = __sync_bool_compare_and_swap(dd->a,dx,success?dd->n:dd->e);
+    bool v = __sync_bool_compare_and_swap(dd->a, (int64)d|2, success? dd->n : dd->e);
 }
 
 bool CCAS::IsCCASDesc(int64 d){

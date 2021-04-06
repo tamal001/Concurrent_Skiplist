@@ -213,7 +213,7 @@ void MCASBasedSkipList::listTraversal(){
 int MCASBasedSkipList::valueTraversal(){
     node *n = head;
     int count = 0;
-    printf("Traversing list from head: ");
+    //printf("Traversing list from head: ");
     while(n!=NULL){
         count++;
         int value = (int)mcas.valueRead((int64*)&n->value);

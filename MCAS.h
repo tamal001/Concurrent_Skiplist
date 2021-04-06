@@ -11,7 +11,9 @@ public:
         int64 *a[2*NR_LEVELS+1];   //Arrary of addresses to perform CAS on
         int64 e[2*NR_LEVELS+1], n[2*NR_LEVELS+1];  //Expected values and new values at those addresses
         STATUS status;  // Status of CAS
-        MCASDesc() : status(UNDECIDED){}
+        MCASDesc() : status(UNDECIDED){
+            
+        }
     };//__attribute__((aligned(PADDING_BYTES)));
     volatile char padding0[PADDING_BYTES];
     CCAS *Ccas;
@@ -82,14 +84,15 @@ int64 MCAS::MCASRead (int64 *a){
 bool MCAS::MCASHelp(MCASDesc *d){
     int64 v;
     MCASDesc *dd = (MCASDesc *) ((int64)d & (~1));
+    int64 desc = (int64)d | 1;
     STATUS desired = FAILED;
     for(int i = 0; i < dd->N; i++){
         while(true){
-            Ccas->doCCAS(dd->a[i], dd->e[i], (int64)d | 1, &dd->status);
+            Ccas->doCCAS(dd->a[i], dd->e[i], desc, &dd->status);
             v = *(dd->a[i]);
             if(v == dd->e[i] && dd->status == UNDECIDED ) 
                 continue;
-            if( v == (int64)d|1) break;
+            if( v == desc) break;
             if(!(IsMCASDesc(v))) goto decision_point;
             MCASHelp( (MCASDesc *) v);
         }
@@ -98,12 +101,12 @@ bool MCAS::MCASHelp(MCASDesc *d){
 decision_point:
     //d->status.compare_exchange_strong(UNDECIDED, desired);
     bool vv = __sync_bool_compare_and_swap(&dd->status,UNDECIDED,desired);
-    bool success = (d->status==SUCCEEDED);
-    for(int i = 0; i < d->N; i++){
-        int64 temp = (int64)d |1;
+    //if(!vv) printf("Status is %d\n",dd->status);
+    bool success = (dd->status==SUCCEEDED);
+    for(int i = 0; i < dd->N; i++){
+        //int64 temp = (int64)d |1;
         //d->a[i]->compare_exchange_strong((int64*)temp, success? d->n[i] : d->e[i]);
-        vv = __sync_bool_compare_and_swap(dd->a[i],temp,success? d->n[i] : d->e[i]);
-        //if(!vv) printf("Kept the old value expected: %ld, got: %ld\n",temp,*(dd->a[i]));
+        vv = __sync_bool_compare_and_swap(dd->a[i], desc, success? dd->n[i] : dd->e[i]);
     }
     return success;
 }

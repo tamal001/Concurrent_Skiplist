@@ -12,6 +12,7 @@
 #include "util.h"
 
 #include "MCASBasedSkipList.h"
+#include "CASBasedSkipList.h"
 
 using namespace std;
 
@@ -82,12 +83,12 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
                 double operationType = g->rngs[tid].nextNatural() / (double) numeric_limits<unsigned int>::max() * 100;
                 
                 key = (int) (1 + (g->rngs[tid].nextNatural() % g->keyRangeSize));
-                value = (int) g->rngs[tid].nextNatural()% 100000000;
+                value = (int) g->rngs[tid].nextNatural()% 10000000;
 
                 // insert or delete this key (50% probability of each)
                 if (operationType < insertPercent) {
                     value = value < 0? -value:value;
-                    auto result = g->ds->insertOrUpdate(tid, key, value);
+                    auto result = g->ds->insertOrUpdate(key, value);
                     //Checksum only updated the first time the key is inserted. Not added for update operation.
                     if (result) {
                         g->keyChecksum.add(tid, key);
@@ -95,13 +96,13 @@ void runTrial(auto g, const long millisToRun, double insertPercent, double delet
                         
                     }
                 } else if (operationType < insertPercent + deletePercent) {
-                    auto result = g->ds->erase(tid, key);
+                    auto result = g->ds->erase(key);
                     if (result) {
                         g->keyChecksum.add(tid, -key);
                         g->sizeChecksum.add(tid, -1);
                     }
                 } else {
-                    auto result = g->ds->contains(tid, key);
+                    auto result = g->ds->contains(key);
                     garbage += result;
                 }
                 
@@ -134,7 +135,7 @@ void runExperiment(int keyRangeSize, int millisToRun, int totalThreads, double i
     // create globals struct that all threads will access (with padding to prevent false sharing on control logic meta data)
     int minKey = 0;
     int maxKey = keyRangeSize;
-    auto dataStructure = new DataStructureType(totalThreads, minKey, maxKey);
+    auto dataStructure = new DataStructureType(totalThreads);
     auto g = new globals_t<DataStructureType>(millisToRun, totalThreads, keyRangeSize, dataStructure);
     
     // Prefill the data structure
@@ -206,6 +207,7 @@ int main(int argc, char** argv) {
         cout<<"USAGE: "<<argv[0]<<" [options]"<<endl;
         cout<<"Options:"<<endl;
         cout<<"    -t [int]     milliseconds to run"<<endl;
+        cout<<"    -c [int]     CAS to be used for datastructure, 0 for CAS, 1 for MCAS"<<endl;
         cout<<"    -s [int]     size of the key range that random keys will be drawn from (i.e., range [1, s])"<<endl;
         cout<<"    -n [int]     number of threads that will perform inserts and deletes"<<endl;
         cout<<"    -i [double]  percent of operations that will be insert (example: 20)"<<endl;
@@ -218,6 +220,7 @@ int main(int argc, char** argv) {
     int millisToRun = -1;
     int keyRangeSize = 0;
     int totalThreads = 0;
+    int casType = 0;
     double insertPercent = 0;
     double deletePercent = 0;
     
@@ -227,6 +230,8 @@ int main(int argc, char** argv) {
             keyRangeSize = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-n") == 0) {
             totalThreads = atoi(argv[++i]);
+        }else if (strcmp(argv[i], "-c") == 0) {
+            casType = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-t") == 0) {
             millisToRun = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-i") == 0) {
@@ -259,7 +264,14 @@ int main(int argc, char** argv) {
         std::cout<<"ERROR: totalThreads="<<totalThreads<<" >= MAX_THREADS="<<MAX_THREADS<<std::endl;
         return 1;
     }
-    runExperiment<MCASBasedSkipList>(keyRangeSize, millisToRun, totalThreads, insertPercent, deletePercent);
+    if(casType == 0){
+        runExperiment<CASBasedSkipList>(keyRangeSize, millisToRun, totalThreads, insertPercent, deletePercent);
+    }else if(casType == 1){
+        runExperiment<MCASBasedSkipList>(keyRangeSize, millisToRun, totalThreads, insertPercent, deletePercent);
+    }else{
+        std::cout <<"Wrong cas type"<<endl;
+        exit(0);
+    }
     
     return 0;
 }
